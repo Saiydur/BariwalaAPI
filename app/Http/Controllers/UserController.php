@@ -11,6 +11,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Str;
 
 class UserController extends Controller
 {
@@ -32,6 +33,7 @@ class UserController extends Controller
         }
         return response()->json(
             [
+                'status'=>"success",
                 'data' => $users,
             ],
             200
@@ -50,6 +52,11 @@ class UserController extends Controller
         );
     }
 
+    /**
+     * Verify user email
+     * @param $email as string where verification link will be sent
+     * @return \Illuminate\Http\Response
+     */
     public function sendVerifyMailLink($email)
     {
         $user = User::where('email', $email)->first();
@@ -75,6 +82,11 @@ class UserController extends Controller
         );
     }
 
+    /**
+     * Verify At Database
+     * @param $id as int
+     * @return \Illuminate\Http\Response
+     */
     public function verify($id)
     {
         $user = User::find($id);
@@ -120,8 +132,8 @@ class UserController extends Controller
             'role' => 'required',
         ],
         [
-            'username.required' => 'username is required',
-            'username.unique' => 'username is already taken',
+            'username.required' => 'Username is required',
+            'username.unique' => 'Username is already taken',
             'email.required' => 'Email is required',
             'email.unique' => 'Email is already taken',
             'date_of_birth.required' => 'Date of birth is required',
@@ -137,9 +149,9 @@ class UserController extends Controller
         if ($validator->fails()) {
             return response()->json(
                 [
-                    'error' => [$validator->errors()],
+                    'status' => 400,
+                    'message' => [$validator->errors()],
                 ],
-                400
             );
         }
         $user = new User();
@@ -171,16 +183,16 @@ class UserController extends Controller
         if ($user) {
             return response()->json(
                 [
+                    'status' => 200,
                     'message' => 'To Active Your Account Please Verify Your Email',
                 ],
-                201
             );
         } else {
             return response()->json(
                 [
+                    'status' => 500,
                     'message' => 'User creation failed',
                 ],
-                500
             );
         }
     }
@@ -193,21 +205,39 @@ class UserController extends Controller
      */
     public function show($id)
     {
-        $user = User::find($id);
-        json_encode($user);
+        $user = User::where('id', $id)->first();
+        $roles = array();
+        foreach ($user->userRoles as $role) {
+            array_push($roles, $role->name);
+        }
+        $user = [
+            "id" => $user->id,
+            "username" => $user->username,
+            "email" => $user->email,
+            "first_name" => $user->first_name,
+            "last_name" => $user->last_name,
+            "date_of_birth" => $user->date_of_birth,
+            "nid" => $user->NID,
+            "phone" => $user->phone,
+            "present_address" => $user->userAddress->present_address,
+            "permanent_address" => $user->userAddress->permanent_address,
+            "is_active" => $user->userActivity->is_active,
+            "roles" => $roles,
+            "is_verified" => $user->userActivity->is_verified,
+        ];
         if ($user) {
             return response()->json(
                 [
-                    'data' => $user,
+                    "status" => 200,
+                    'message' => $user,
                 ],
-                200
             );
         } else {
             return response()->json(
                 [
-                    'message' => 'User not found',
+                    "status" => 404,
+                    "message" => (int) $id . ' not found',
                 ],
-                404
             );
         }
     }
@@ -220,14 +250,27 @@ class UserController extends Controller
      */
     public function edit($id)
     {
-        $user = User::find($id);
-        json_encode($user);
+        $user = User::where('id', $id)->first();
+        $user = [
+            "id" => $user->id,
+            "username" => $user->username,
+            "email" => $user->email,
+            "first_name" => $user->first_name,
+            "last_name" => $user->last_name,
+            "date_of_birth" => $user->date_of_birth,
+            "phone" => $user->phone,
+            "NID" => $user->NID,
+            "present_address" => $user->userAddress->present_address,
+            "permanent_address" => $user->userAddress->permanent_address,
+            "created_at" => $user->created_at,
+            "updated_at" => $user->updated_at,
+        ];
         if ($user) {
             return response()->json(
                 [
-                    'data' => $user,
-                ],
-                200
+                    "status" => 200,
+                    'message' => $user,
+                ]
             );
         } else {
             return response()->json(
@@ -249,21 +292,16 @@ class UserController extends Controller
     public function update(Request $request, $id)
     {
         $validator = Validator::make($request->all(), [
-            'username' => 'required|unique:users|max:255',
-            'email' => 'required|unique:users|max:255',
+            'email' => 'required|max:255',
             'date_of_birth' => 'required',
             'first_name' => 'required',
             'last_name' => 'required',
             'nid' => 'required',
             'phone' => 'required',
-            'password' => 'required',
             'present_address' => 'required',
             'permanent_address' => 'required',
-            'role' => 'required',
         ],
         [
-            'username.required' => 'username is required',
-            'username.unique' => 'username is already taken',
             'email.required' => 'Email is required',
             'email.unique' => 'Email is already taken',
             'date_of_birth.required' => 'Date of birth is required',
@@ -274,25 +312,21 @@ class UserController extends Controller
             'password.required' => 'Password is required',
             'present_address.required' => 'Present address is required',
             'permanent_address.required' => 'Permanent address is required',
-            'role.required' => 'Role is required',
         ]);
         if ($validator->fails()) {
             return response()->json(
                 [
-                    'error' => [$validator->errors()],
+                    "status" => 400,
+                    'message' => [$validator->errors()],
                 ],
-                400
             );
         }
-        $user = new User();
-        $user->username = $request->username;
-        $user->email = $request->email;
+        $user = User::find($id);
         $user->date_of_birth = $request->date_of_birth;
         $user->first_name = $request->first_name;
         $user->last_name = $request->last_name;
         $user->NID = $request->nid;
         $user->phone = $request->phone;
-        $user->password = $request->password;
 
         $userAddress = new UserAddress();
         $userAddress->present_address = $request->present_address;
@@ -338,16 +372,16 @@ class UserController extends Controller
         if ($user) {
             return response()->json(
                 [
-                    'data' => $user,
-                ],
-                200
+                    "status" => 200,
+                    'message' => $user,
+                ]
             );
         } else {
             return response()->json(
                 [
+                    "status" => 404,
                     'message' => 'User not found',
                 ],
-                400
             );
         }
     }
@@ -379,6 +413,12 @@ class UserController extends Controller
         }
     }
 
+    /**
+     * Get the specified resource from storage for login.
+     *
+     * @param  \Illuminate\Http\Request  $request
+     * @return \Illuminate\Http\Response
+     */
     public function login(Request $request)
     {
         $validator = Validator::make($request->all(), [
@@ -400,53 +440,86 @@ class UserController extends Controller
         $user = User::where('username', $request->usernameOrEmail)->orWhere('email', $request->usernameOrEmail)->first();
         if ($user) {
             if (password_verify($request->password, $user->password)) {
-                session()->put('user', $user);
+                $token = Str::random(60);
+                $user->forceFill([
+                    'api_token' => hash('sha256', $token),
+                ])->save();
                 return response()->json(
-                    [
-                        'message' => 'User logged in successfully',
-                    ],
+                    $user->api_token,
                     200
                 );
             } else {
                 return response()->json(
                     [
-                        'message' => 'Invalid Username or Email',
+                        'err' => 'Invalid Username or Email',
                     ],
                     400
                 );
             }
         } else {
             return response()->json(
-                [
-                    'message' => 'Invalid Username or Email',
-                ],
+                ["err"=>'Invalid Username or Email'],
                 404
             );
         }
     }
 
-    public function logout(){
-        session()->forget('user');
+    /**
+     * Get the specified resource from session for logout.
+     *
+     * @param  \Illuminate\Http\Request  $request
+     * @return \Illuminate\Http\Response
+     */
+    public function logout(Request $request){
+        $user = User::where('api_token', $request->input("token"))->first();
+        $user->api_token = null;
+        $user->save();
         return response()->json(
             [
+                "status" => 200,
                 'message' => 'User logged out successfully',
-            ],
-            200
+            ]
         );
     }
 
-    public function profile(){
-       $user = session()->get('user');
+    /**
+     * Get the specified resource from session for profile.
+     *
+     * @param  \Illuminate\Http\Request  $request
+     * @return \Illuminate\Http\Response
+     */
+    public function profile(Request $request){
+        $user = User::where("api_token", $request->input("api_token"))->first();
+        $user = [
+            "id" => $user->id,
+            "username" => $user->username,
+            "email" => $user->email,
+            "first_name" => $user->first_name,
+            "last_name" => $user->last_name,
+            "date_of_birth" => $user->date_of_birth,
+            "phone" => $user->phone,
+            "NID" => $user->NID,
+            "present_address" => $user->userAddress->present_address,
+            "permanent_address" => $user->userAddress->permanent_address,
+            "created_at" => $user->created_at,
+            "updated_at" => $user->updated_at,
+        ];
          if($user){
               return response()->json(
                 [
-                    'data' => $user,
-                ],
-                200
+                    "status" => 200,
+                    'message' => $user,
+                ]
               );
-            }
+        }
     }
 
+    /**
+     * Get the specified resource from storage for edit.
+     *
+     * @param  int  $id
+     * @return \Illuminate\Http\Response
+     */
     public function editProfile()
     {
         $user = User::find(session()->get('user')->id);
@@ -470,10 +543,14 @@ class UserController extends Controller
         }
     }
 
-    public function updateProfile(Request $request){
+    /**
+     * Update the specified resource in storage.
+     *
+     * @param  \Illuminate\Http\Request  $request
+     * @return \Illuminate\Http\Response
+     */
+    public function updateProfile(Request $request,$id){
         $validator = Validator::make($request->all(), [
-            'username' => 'required',
-            'email' => 'required',
             'date_of_birth' => 'required',
             'first_name' => 'required',
             'last_name' => 'required',
@@ -483,8 +560,6 @@ class UserController extends Controller
             'permanent_address' => 'required',
         ],
         [
-            'username.required' => 'Username is required',
-            'email.required' => 'Email is required',
             'date_of_birth.required' => 'Date of birth is required',
             'first_name.required' => 'First name is required',
             'last_name.required' => 'Last name is required',
@@ -497,15 +572,13 @@ class UserController extends Controller
         if ($validator->fails()) {
             return response()->json(
                 [
-                    'error' => [$validator->errors()],
+                    'status' => 400,
+                    'message' => [$validator->errors()],
                 ],
-                400
             );
         }
 
-        $user = User::find(session()->get('user')->id);
-        $user->username = $request->username;
-        $user->email = $request->email;
+        $user = User::find($id);
         $user->date_of_birth = $request->date_of_birth;
         $user->first_name = $request->first_name;
         $user->last_name = $request->last_name;
@@ -519,29 +592,34 @@ class UserController extends Controller
         if ($user) {
             return response()->json(
                 [
+                    'status' => 200,
                     'message' => 'User updated successfully',
-                ],
-                200
+                ]
             );
         } else {
             return response()->json(
                 [
+                    'status' => 500,
                     'message' => 'User updating failed',
-                ],
-                500
+                ]
             );
         }
     }
 
+
+    /**
+     * Update the specified resource in storage.
+     *
+     * @param  \Illuminate\Http\Request  $request
+     * @return \Illuminate\Http\Response
+     */
     public function changePassword(Request $request)
     {
         $validator = Validator::make($request->all(), [
-            'old_password' => 'required',
             'new_password' => 'required',
             'confirm_password' => 'required',
         ],
         [
-            'old_password.required' => 'Old password is required',
             'new_password.required' => 'New password is required',
             'confirm_password.required' => 'Confirm password is required',
         ]);
@@ -549,57 +627,57 @@ class UserController extends Controller
         if ($validator->fails()) {
             return response()->json(
                 [
-                    'error' => [$validator->errors()],
+                    "status" => 400,
+                    'message' => [$validator->errors()],
                 ],
-                400
             );
         }
 
-        $user = User::find(session()->get('user')->id);
-        if (password_verify($request->old_password, $user->password)) {
+        $user = User::where("api_token",$request->input("api_token"));
             if ($request->new_password == $request->confirm_password) {
-                $user->password = bcrypt($request->new_password);
-                $user->save();
+                $user->update(
+                    [
+                        'password' => bcrypt($request->new_password),
+                    ]
+                );
                 return response()->json(
                     [
+                        "status" => 200,
                         'message' => 'Password changed successfully',
-                    ],
-                    200
+                    ]
                 );
             } else {
                 return response()->json(
                     [
+                        "status" => 400,
                         'message' => 'New password and confirm password does not match',
-                    ],
-                    400
+                    ]
                 );
             }
-        } else {
-            return response()->json(
-                [
-                    'message' => 'Old password does not match',
-                ],
-                400
-            );
-        }
     }
 
-    public function check()
+    public function check(Request $request)
     {
-        if (session()->has('user')) {
+        $user = User::where("api_token",$request->input("api_token"))->first();
+        $roles = array();
+
+        foreach($user->userRoles as $role){
+            array_push($roles,$role->name);
+        }
+
+        if($user){
             return response()->json(
                 [
-                    'message' => 'User logged in',
-                    'data' => session()->get('user'),
-                ],
-                200
+                    "status" => 200,
+                    'message' => $roles,
+                ]
             );
-        } else {
+        }else{
             return response()->json(
                 [
+                    "status" => 400,
                     'message' => 'User not logged in',
-                ],
-                404
+                ]
             );
         }
     }

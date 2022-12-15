@@ -23,4 +23,8 @@ class User extends Model
     {
         return $this->hasMany(UserRole::class);
     }
+
+    public function flats(){
+        return $this->hasMany(Flat::class);
+    }
 }
